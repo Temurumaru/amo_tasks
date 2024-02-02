@@ -4,54 +4,26 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use AmoCRM\Client\AmoCRMApiClient;
-use AmoCRM\Collections\CatalogElementsCollection;
-use AmoCRM\Collections\ContactsCollection;
-use AmoCRM\Collections\CustomFieldsValuesCollection;
-use AmoCRM\Collections\Leads\LeadsCollection;
 use AmoCRM\Collections\LinksCollection;
-use AmoCRM\Collections\NotesCollection;
-use AmoCRM\Collections\TasksCollection;
 use AmoCRM\Exceptions\AmoCRMApiException;
 use AmoCRM\Exceptions\AmoCRMMissedTokenException;
 use AmoCRM\Exceptions\AmoCRMoAuthApiException;
 use AmoCRM\Exceptions\InvalidArgumentException;
-use AmoCRM\Helpers\EntityTypesInterface;
-use AmoCRM\Models\CatalogElementModel;
-use AmoCRM\Models\ContactModel;
 use AmoCRM\Models\Customers\CustomerModel;
-use AmoCRM\Models\CustomFieldsValues\MultitextCustomFieldValuesModel;
-use AmoCRM\Models\CustomFieldsValues\NumericCustomFieldValuesModel;
-use AmoCRM\Models\CustomFieldsValues\SelectCustomFieldValuesModel;
-use AmoCRM\Models\CustomFieldsValues\TextCustomFieldValuesModel;
-use AmoCRM\Models\CustomFieldsValues\ValueCollections\MultitextCustomFieldValueCollection;
-use AmoCRM\Models\CustomFieldsValues\ValueCollections\NumericCustomFieldValueCollection;
-use AmoCRM\Models\CustomFieldsValues\ValueCollections\SelectCustomFieldValueCollection;
-use AmoCRM\Models\CustomFieldsValues\ValueCollections\TextCustomFieldValueCollection;
-use AmoCRM\Models\CustomFieldsValues\ValueModels\MultitextCustomFieldValueModel;
-use AmoCRM\Models\CustomFieldsValues\ValueModels\NumericCustomFieldValueModel;
-use AmoCRM\Models\CustomFieldsValues\ValueModels\SelectCustomFieldValueModel;
-use AmoCRM\Models\CustomFieldsValues\ValueModels\TextCustomFieldValueModel;
-use AmoCRM\Models\LeadModel;
-use AmoCRM\Models\NoteType\ServiceMessageNote;
-use AmoCRM\Models\TaskModel;
-use Illuminate\Database\Eloquent\Relations\Concerns\AsPivot;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Config;
-use League\OAuth2\Client\Token\AccessToken;
 
 use App\Services\AmoService;
 
-
 class MainController extends Controller
 {
-
     /**
+     * @param Request $req
+     * @return \Illuminate\Http\JsonResponse
      * @throws AmoCRMoAuthApiException
      */
     public function credentials(Request $req): \Illuminate\Http\JsonResponse
     {
-        $api = (new AmoService())->ConnectAmoApi();
+        $api = (new AmoService())->connectAmoApi();
 
         $token = $api->getOAuthClient()->getAccessTokenByCode($req->code);
 
@@ -59,19 +31,21 @@ class MainController extends Controller
 
         return response()->json(
             [
-                'success' => 'Successful completed'
+                'success' => 'Successful completed',
             ]
         );
     }
 
 
     /**
+     * @param Request $req
+     * @return \Illuminate\Http\JsonResponse
+     * @throws AmoCRMApiException
+     * @throws AmoCRMMissedTokenException
      * @throws AmoCRMoAuthApiException
      * @throws InvalidArgumentException
-     * @throws AmoCRMMissedTokenException
-     * @throws AmoCRMApiException
      */
-    public function leadCreate(Request $req): \Illuminate\Http\JsonResponse
+    public function leadRequest(Request $req): \Illuminate\Http\JsonResponse
     {
         $req->validate([
             'product_name' => 'required|string',
@@ -87,7 +61,7 @@ class MainController extends Controller
         $amo = new AmoService();
 
         $productName = $req->product_name;
-        $leadName = $productName;
+        $leadName = "Сделка по покупке <<{$productName}>>";
         $leadPrice = (int)$req->product_price;
 
         // Рандомный Пользователь
@@ -97,67 +71,63 @@ class MainController extends Controller
         // Получение искомого Контакта
         $contact = $amo->getContactWherePhone($req->phone_number);
 
-
         if ($contact !== null) {
-
             // Проверяем на 142 статус (то есть что Сделка завершена)
             if ($amo->isLeadSucceeded($contact->getLeads())) {
                 // Создаём покупателя
-                $customer = (new CustomerModel())->setName("Test Customer")->setNextDate(time());
-                try {
-                    $customer = $amo->Api->customers()->addOne($customer);
-                } catch (AmoCRMApiException $e) {
-                    dd($e);
-                }
+                $customer = (new CustomerModel())->setName('Test Customer')->setNextDate(time());
+                $customer = $amo->api->customers()->addOne($customer);
                 $links = (new LinksCollection())->add($contact);
-                $amo->Api->customers()->link($customer, $links);
-                $amo->CreateNote($contact, "Создан покупатель {$customer->getName()}", $randomUserId);
+                $amo->api->customers()->link($customer, $links);
+                $amo->createNote($contact, 'Создан покупатель ' . $customer->getName(), $randomUserId);
 
                 return response()->json(
                     [
-                        'success' => 'Добавлен покупатель'
+                        'success' => 'Добавлен покупатель',
                     ]
                 );
             } else {
                 //Создадим примечания
-                $amo->CreateNote($contact, "Совершена попытка создать дубль {$contact->getLastName()} {$contact->getFirstName()}", $randomUserId);
+                $amo->createNote(
+                    $contact,
+                    'Совершена попытка создать дубль ' . $contact->getLastName() . ' ' . $contact->getFirstName(),
+                    $randomUserId
+                );
 
                 return response()->json(
                     [
-                        'success' => 'Добавлена заметка в контакт'
+                        'success' => 'Добавлена заметка в контакт',
                     ]
                 );
             }
         }
 
-        if (empty($contact)) {
-            // Создание Контакта
-            $contact = $amo->CreateContact([
-                $req->last_name,
-                $req->first_name,
-                $randomUserId,
-                $req->phone_number,
-                $req->email,
-                $req->date_of_birth,
-                $req->gender
-            ]);
+        // Создание Контакта
+        $contact = $amo->toCollectContact(
+            $req->last_name,
+            $req->first_name,
+            $randomUserId,
+            $req->phone_number,
+            $req->email,
+            $req->date_of_birth,
+            $req->gender
+        );
 
-            // Создание Сделки
-            $lead = $amo->CreateLead($leadName, $leadPrice);
+        // Создание Сделки
+        $lead = $amo->createLead($leadName, $productName, $leadPrice, $randomUserId);
 
-            // Создадим задачу
-            $amo->CreateTask($lead, $randomUser);
+        // Создадим задачу
+        $amo->createTask($lead, $randomUser);
 
-            // Products
-            [$productsCatalog, $products] = $amo->CreateProducts();
+        // Products
+        $products = $amo->createProducts();
 
-            $amo->linkCatalogToLead($lead, $productsCatalog, $products);
-            $amo->linkContactToLead($lead, $contact);
-        }
+        $amo->linkCatalogToLead($lead, $products);
+        $amo->linkContactToLeadAndSaveContact($lead, $contact);
 
         return response()->json(
             [
-                'success' => 'Сделка успешно создана'
+                'success' => 'Сделка успешно создана',
             ]
         );
     }

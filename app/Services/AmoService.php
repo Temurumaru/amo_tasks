@@ -6,12 +6,14 @@ namespace App\Services;
 
 use AmoCRM\Client\AmoCRMApiClient;
 use AmoCRM\Collections\CatalogElementsCollection;
+use AmoCRM\Collections\CatalogsCollection;
 use AmoCRM\Collections\ContactsCollection;
 use AmoCRM\Collections\CustomFieldsValuesCollection;
 use AmoCRM\Collections\Leads\LeadsCollection;
 use AmoCRM\Collections\LinksCollection;
 use AmoCRM\Collections\NotesCollection;
 use AmoCRM\Collections\TasksCollection;
+use AmoCRM\EntitiesServices\CatalogElements;
 use AmoCRM\Exceptions\AmoCRMApiException;
 use AmoCRM\Exceptions\AmoCRMMissedTokenException;
 use AmoCRM\Exceptions\AmoCRMoAuthApiException;
@@ -33,38 +35,29 @@ use AmoCRM\Models\LeadModel;
 use AmoCRM\Models\NoteType\ServiceMessageNote;
 use AmoCRM\Models\TaskModel;
 use AmoCRM\Models\UserModel;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Config;
 use League\OAuth2\Client\Token\AccessToken;
-use PhpOption\None;
+
+use App\Enums\AmoEnum;
 
 class AmoService
 {
-    public AmoCRMApiClient $Api;
-
-    private const PRODUCT_NAME_FIELD_ID = 465113;
-    private const MARGINALITY_FIELD_ID = 465129;
-    private const DATE_OF_BIRTH_FIELD_ID = 626367;
-    private const GENDER_FIELD_ID = 626533;
-
-    private const CATALOG_ID = 7527;
-    private const CATALOG_PRICE_FIELD_ID = 938161;
-
+    public AmoCRMApiClient $api;
 
     public function __construct()
     {
-        $this->Api = $this->ConnectAmoApi();
+        $this->api = $this->connectAmoApi();
         $jsonToken = json_decode(file_get_contents('../token.json'), true);
 
         $token = new AccessToken($jsonToken);
 
-        $this->Api->setAccessToken($token);
+        $this->api->setAccessToken($token);
     }
 
     /**
      * @return AmoCRMApiClient
      */
-    public function ConnectAmoApi(): AmoCRMApiClient
+    public function connectAmoApi(): AmoCRMApiClient
     {
         $api = new AmoCRMApiClient(
             Config::get('app.amo_api.client_id'),
@@ -76,46 +69,37 @@ class AmoService
     }
 
     /**
-     * @param string $name
+     * @param string $leadName
+     * @param string $productName
      * @param int $price
+     * @param int $randomUserId
      * @return LeadModel
      * @throws AmoCRMApiException
      * @throws AmoCRMMissedTokenException
      * @throws AmoCRMoAuthApiException
      */
-    public function CreateLead(string $name, int $price): LeadModel
+    public function createLead(string $leadName, string $productName, int $price, int $randomUserId): LeadModel
     {
-        // Расчёт маржинальности
-        $marginality = $price / 2;
-
         // Создание Сделки
-        $lead = (new LeadModel())->setName("Сделка <<{$name}>>")
+        $lead = (new LeadModel())->setName($leadName)
             ->setPrice($price)->setCustomFieldsValues(
                 (new CustomFieldsValuesCollection())->add(
                     (new TextCustomFieldValuesModel())->setFieldId(
-                        self::PRODUCT_NAME_FIELD_ID
+                        AmoEnum::LEAD_PRODUCT_NAME_FIELD_ID
                     )->setValues(
                         (new TextCustomFieldValueCollection())->add(
                             (new TextCustomFieldValueModel())->setValue(
-                                $name
-                            )
-                        )
-                    )
-                )->add(
-                    (new NumericCustomFieldValuesModel())->setFieldId(
-                        self::MARGINALITY_FIELD_ID
-                    )->setValues(
-                        (new NumericCustomFieldValueCollection())->add(
-                            (new NumericCustomFieldValueModel())->setValue(
-                                $marginality
+                                $productName
                             )
                         )
                     )
                 )
             );
 
+        $lead->setResponsibleUserId($randomUserId);
+
         // Запрос на создание сделки
-        return $this->Api->leads()->addOne($lead);
+        return $this->api->leads()->addOne($lead);
     }
 
     /**
@@ -126,14 +110,14 @@ class AmoService
      * @throws AmoCRMMissedTokenException
      * @throws AmoCRMoAuthApiException
      */
-    public function CreateTask(LeadModel $lead, UserModel $user): TasksCollection
+    public function createTask(LeadModel $lead, UserModel $user): TasksCollection
     {
         // Создадим задачу
         $tasksCollection = new TasksCollection();
 
         $task = new TaskModel();
         $task->setTaskTypeId(TaskModel::TASK_TYPE_ID_FOLLOW_UP)
-            ->setText("{$lead->getName()}")
+            ->setText($lead->getName())
             ->setEntityType(EntityTypesInterface::LEADS)
             ->setEntityId($lead->getId())
             ->setDuration(9 * 60 * 60) // 9 часов
@@ -160,7 +144,7 @@ class AmoService
         $task->setCompleteTill($endDate);
         $tasksCollection->add($task);
 
-        return $this->Api->tasks()->add($tasksCollection);
+        return $this->api->tasks()->add($tasksCollection);
     }
 
     /**
@@ -171,7 +155,7 @@ class AmoService
      */
     public function getRandomUser(): UserModel
     {
-        return (collect($this->Api->users()->get())->random());
+        return (collect($this->api->users()->get())->random());
     }
 
     /**
@@ -182,7 +166,7 @@ class AmoService
     public function getContactWherePhone(string $phoneNumber): ContactModel|null
     {
         $contacts = $this->getContactsWithLeads();
-        return ($contacts == null) ? null : $this->searchContact($contacts, $phoneNumber);
+        return ($contacts === null) ? null : $this->searchContactByPhone($contacts, $phoneNumber);
     }
 
     /**
@@ -193,7 +177,7 @@ class AmoService
     public function getContactsWithLeads(): ContactsCollection|null
     {
         try {
-            $contacts = $this->Api->contacts()->get(with: [ContactModel::LEADS]);
+            $contacts = $this->api->contacts()->get(with: [ContactModel::LEADS]);
         } catch (AmoCRMApiException $e) {
             return null;
         }
@@ -210,10 +194,11 @@ class AmoService
      */
     public function isLeadSucceeded(?LeadsCollection $leads): bool
     {
-        if ($leads != null) {
+        if ($leads !== null) {
+            /** @var LeadModel $lead */
             foreach ($leads as $lead) {
-                $lead = $this->Api->leads()->getOne($lead->getId());
-                if ($lead->getStatusId() == LeadModel::WON_STATUS_ID) {
+                $lead = $this->api->leads()->getOne($lead->getId());
+                if ($lead->getStatusId() === LeadModel::WON_STATUS_ID) {
                     return true;
                 }
             }
@@ -227,14 +212,15 @@ class AmoService
      * @param string $phone
      * @return ContactModel|null
      */
-    private function searchContact(ContactsCollection $contacts, string $phone): ContactModel|null
+    private function searchContactByPhone(ContactsCollection $contacts, string $phone): ?ContactModel
     {
+        /** @var ContactModel $contact */
         foreach ($contacts as $contact) {
             $contactsPhoneNumbers = $contact->getCustomFieldsValues()
-                ->getBy('fieldCode', 'PHONE')
+                ->getBy('fieldCode', AmoEnum::PHONE_CUSTOM_FIELD_CODE)
                 ->getValues();
             foreach ($contactsPhoneNumbers as $phoneNumber) {
-                if ($phoneNumber->getValue() == $phone) {
+                if ($phoneNumber->getValue() === $phone) {
                     return $contact;
                 }
             }
@@ -245,7 +231,6 @@ class AmoService
 
     /**
      * @param LeadModel $lead
-     * @param CatalogModel $productsCatalog
      * @param CatalogElementsCollection $products
      * @return void
      * @throws AmoCRMApiException
@@ -255,59 +240,47 @@ class AmoService
      */
     public function linkCatalogToLead(
         LeadModel $lead,
-        CatalogModel $productsCatalog,
         CatalogElementsCollection $products
     ): void {
-        $lead_links = new LinksCollection();
+        $leadLinks = new LinksCollection();
 
-        $elements = $this->Api->catalogElements($productsCatalog->getId())
+        /** @var CatalogElements $elements */
+        $elements = $this->api->catalogElements(AmoEnum::PRODUCT_CATALOG_ID)
             ->add($products);
 
-        foreach ($elements as $element) {
-            $lead_links->add(
-                $element->setQuantity(rand(1_000, 900_000))
-            );
-        }
-
-        $this->Api->leads()->link($lead, $lead_links);
+        $this->api->leads()->link($lead, $leadLinks);
     }
 
-    public function linkContactToLead(LeadModel $lead, ContactModel $contact): void
+    public function linkContactToLeadAndSaveContact(LeadModel $lead, ContactModel $contact): void
     {
-        $contact = $this->Api->contacts()->addOne($contact);
-        $contact_links = new LinksCollection();
-        $contact_links->add($lead);
-        $this->Api->contacts()->link($contact, $contact_links);
+        $contact = $this->api->contacts()->addOne($contact);
+        $contactLinks = new LinksCollection();
+        $contactLinks->add($lead);
+        $this->api->contacts()->link($contact, $contactLinks);
     }
 
     /**
-     * @param array $data
+     * @param string $lastName
+     * @param string $firstname
+     * @param int $randomUserId
+     * @param string $phoneNumber
+     * @param string $email
+     * @param string $dateOfBirth
+     * @param string $gender
      * @return ContactModel
      */
-    public function CreateContact(
-        array $data = [
-            'lastName' => '',
-            'firstname' => '',
-            'randomUserId' => '',
-            'phoneNumber' => '',
-            'email' => '',
-            'dateOfBirth' => '',
-            'gender' => '',
-        ]
+    public function toCollectContact(
+        string $lastName,
+        string $firstname,
+        int $randomUserId,
+        string $phoneNumber,
+        string $email,
+        string $dateOfBirth,
+        string $gender
     ): ContactModel {
-        [
-            $lastName,
-            $firstname,
-            $randomUserId,
-            $phoneNumber,
-            $email,
-            $dateOfBirth,
-            $gender
-        ] = $data;
-
         // Создание Контакта
         $contact = new ContactModel();
-        $contact->setName("{$lastName} {$firstname}");
+        $contact->setName($lastName . ' ' . $firstname);
         $contact->setFirstName($firstname);
         $contact->setLastName($lastName);
         $contact->setResponsibleUserId($randomUserId);
@@ -315,31 +288,31 @@ class AmoService
         $contactCustomFields = (new CustomFieldsValuesCollection())
             ->add(
                 (new MultitextCustomFieldValuesModel())
-                    ->setFieldCode('PHONE')
+                    ->setFieldCode(AmoEnum::PHONE_CUSTOM_FIELD_CODE)
                     ->setValues(
                         (new MultitextCustomFieldValueCollection())
                             ->add(
                                 (new MultitextCustomFieldValueModel())
-                                    ->setEnum('WORK')
+                                    ->setEnum(AmoEnum::WORK_CUSTOM_FIELD_VALUE_CODE)
                                     ->setValue($phoneNumber)
                             )
                     )
             )
             ->add(
                 (new MultitextCustomFieldValuesModel())
-                    ->setFieldCode('EMAIL')
+                    ->setFieldCode(AmoEnum::EMAIL_CUSTOM_FIELD_CODE)
                     ->setValues(
                         (new MultitextCustomFieldValueCollection())
                             ->add(
                                 (new MultitextCustomFieldValueModel())
-                                    ->setEnum('WORK')
+                                    ->setEnum(AmoEnum::WORK_CUSTOM_FIELD_VALUE_CODE)
                                     ->setValue($email)
                             )
                     )
             )
             ->add(
                 (new TextCustomFieldValuesModel())
-                    ->setFieldId(self::DATE_OF_BIRTH_FIELD_ID)
+                    ->setFieldId(AmoEnum::CONTACT_DATE_OF_BIRTH_FIELD_ID)
                     ->setValues(
                         (new TextCustomFieldValueCollection())
                             ->add(
@@ -350,7 +323,7 @@ class AmoService
             )
             ->add(
                 (new TextCustomFieldValuesModel())
-                    ->setFieldId(self::GENDER_FIELD_ID)
+                    ->setFieldId(AmoEnum::CONTACT_GENDER_FIELD_ID)
                     ->setValues(
                         (new TextCustomFieldValueCollection())
                             ->add(
@@ -371,13 +344,9 @@ class AmoService
      * @throws AmoCRMMissedTokenException
      * @throws AmoCRMoAuthApiException
      */
-    public function CreateProducts(): array
+    public function createProducts(): CatalogElementsCollection
     {
-        // Products
-        $catalogs = $this->Api->catalogs()->get();
-        $productsCatalog = $catalogs->getBy('id', self::CATALOG_ID);
-
-        $products = (new CatalogElementsCollection())
+        return (new CatalogElementsCollection())
             ->add(
                 (new CatalogElementModel())
                     ->setName('Ayaneo 5')
@@ -386,14 +355,14 @@ class AmoService
                             ->add(
                                 (new NumericCustomFieldValuesModel())
                                     ->setFieldId(
-                                        self::CATALOG_PRICE_FIELD_ID
+                                        AmoEnum::PRODUCT_CATALOG_PRICE_FIELD_ID
                                     )
                                     ->setValues(
                                         (new NumericCustomFieldValueCollection())
                                             ->add(
                                                 (new NumericCustomFieldValueModel())
                                                     ->setValue(
-                                                        50_000
+                                                        rand(1_000, 900_000)
                                                     )
                                             )
                                     )
@@ -408,25 +377,33 @@ class AmoService
                             ->add(
                                 (new NumericCustomFieldValuesModel())
                                     ->setFieldId(
-                                        self::CATALOG_PRICE_FIELD_ID
+                                        AmoEnum::PRODUCT_CATALOG_PRICE_FIELD_ID
                                     )
                                     ->setValues(
                                         (new NumericCustomFieldValueCollection())
                                             ->add(
                                                 (new NumericCustomFieldValueModel())
                                                     ->setValue(
-                                                        70_000
+                                                        rand(1_000, 900_000)
                                                     )
                                             )
                                     )
                             )
                     )
             );
-
-        return [$productsCatalog, $products];
     }
 
-    public function CreateNote(
+    /**
+     * @param ContactModel $contact
+     * @param string $text
+     * @param int $randomUserId
+     * @return void
+     * @throws AmoCRMApiException
+     * @throws AmoCRMMissedTokenException
+     * @throws AmoCRMoAuthApiException
+     * @throws InvalidArgumentException
+     */
+    public function createNote(
         ContactModel $contact,
         string $text,
         int $randomUserId
@@ -442,7 +419,7 @@ class AmoService
             ->setCreatedBy($randomUserId);
 
         $notesCollection->add($serviceMessageNote);
-        $leadNotesService = $this->Api->notes(EntityTypesInterface::CONTACTS);
+        $leadNotesService = $this->api->notes(EntityTypesInterface::CONTACTS);
         $notesCollection = $leadNotesService->add($notesCollection);
     }
 }
