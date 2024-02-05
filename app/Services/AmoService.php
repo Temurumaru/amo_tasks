@@ -37,8 +37,7 @@ use AmoCRM\Models\TaskModel;
 use AmoCRM\Models\UserModel;
 use Illuminate\Support\Facades\Config;
 use League\OAuth2\Client\Token\AccessToken;
-
-use App\Enums\AmoEnum;
+use App\Enums\FieldCodesEnum;
 
 class AmoService
 {
@@ -82,10 +81,11 @@ class AmoService
     {
         // Создание Сделки
         $lead = (new LeadModel())->setName($leadName)
-            ->setPrice($price)->setCustomFieldsValues(
+            ->setPrice($price)
+            ->setCustomFieldsValues(
                 (new CustomFieldsValuesCollection())->add(
                     (new TextCustomFieldValuesModel())->setFieldId(
-                        AmoEnum::LEAD_PRODUCT_NAME_FIELD_ID
+                        FieldCodesEnum::LEAD_PRODUCT_NAME_FIELD_ID
                     )->setValues(
                         (new TextCustomFieldValueCollection())->add(
                             (new TextCustomFieldValueModel())->setValue(
@@ -166,7 +166,7 @@ class AmoService
     public function getContactWherePhone(string $phoneNumber): ContactModel|null
     {
         $contacts = $this->getContactsWithLeads();
-        return ($contacts === null) ? null : $this->searchContactByPhone($contacts, $phoneNumber);
+        return $contacts === null ? null : $this->searchContactByPhone($contacts, $phoneNumber);
     }
 
     /**
@@ -217,7 +217,7 @@ class AmoService
         /** @var ContactModel $contact */
         foreach ($contacts as $contact) {
             $contactsPhoneNumbers = $contact->getCustomFieldsValues()
-                ->getBy('fieldCode', AmoEnum::PHONE_CUSTOM_FIELD_CODE)
+                ->getBy('fieldCode', FieldCodesEnum::PHONE_CUSTOM_FIELD_CODE)
                 ->getValues();
             foreach ($contactsPhoneNumbers as $phoneNumber) {
                 if ($phoneNumber->getValue() === $phone) {
@@ -245,13 +245,13 @@ class AmoService
         $leadLinks = new LinksCollection();
 
         /** @var CatalogElements $elements */
-        $elements = $this->api->catalogElements(AmoEnum::PRODUCT_CATALOG_ID)
+        $elements = $this->api->catalogElements(FieldCodesEnum::PRODUCT_CATALOG_ID)
             ->add($products);
 
         $this->api->leads()->link($lead, $leadLinks);
     }
 
-    public function linkContactToLeadAndSaveContact(LeadModel $lead, ContactModel $contact): void
+    public function linkSaveContactAndContactToLead(LeadModel $lead, ContactModel $contact): void
     {
         $contact = $this->api->contacts()->addOne($contact);
         $contactLinks = new LinksCollection();
@@ -269,7 +269,7 @@ class AmoService
      * @param string $gender
      * @return ContactModel
      */
-    public function toCollectContact(
+    public function makeContactModel(
         string $lastName,
         string $firstname,
         int $randomUserId,
@@ -288,31 +288,31 @@ class AmoService
         $contactCustomFields = (new CustomFieldsValuesCollection())
             ->add(
                 (new MultitextCustomFieldValuesModel())
-                    ->setFieldCode(AmoEnum::PHONE_CUSTOM_FIELD_CODE)
+                    ->setFieldCode(FieldCodesEnum::PHONE_CUSTOM_FIELD_CODE)
                     ->setValues(
                         (new MultitextCustomFieldValueCollection())
                             ->add(
                                 (new MultitextCustomFieldValueModel())
-                                    ->setEnum(AmoEnum::WORK_CUSTOM_FIELD_VALUE_CODE)
+                                    ->setEnum(FieldCodesEnum::WORK_CUSTOM_FIELD_VALUE_CODE)
                                     ->setValue($phoneNumber)
                             )
                     )
             )
             ->add(
                 (new MultitextCustomFieldValuesModel())
-                    ->setFieldCode(AmoEnum::EMAIL_CUSTOM_FIELD_CODE)
+                    ->setFieldCode(FieldCodesEnum::EMAIL_CUSTOM_FIELD_CODE)
                     ->setValues(
                         (new MultitextCustomFieldValueCollection())
                             ->add(
                                 (new MultitextCustomFieldValueModel())
-                                    ->setEnum(AmoEnum::WORK_CUSTOM_FIELD_VALUE_CODE)
+                                    ->setEnum(FieldCodesEnum::WORK_CUSTOM_FIELD_VALUE_CODE)
                                     ->setValue($email)
                             )
                     )
             )
             ->add(
                 (new TextCustomFieldValuesModel())
-                    ->setFieldId(AmoEnum::CONTACT_DATE_OF_BIRTH_FIELD_ID)
+                    ->setFieldId(FieldCodesEnum::CONTACT_DATE_OF_BIRTH_FIELD_ID)
                     ->setValues(
                         (new TextCustomFieldValueCollection())
                             ->add(
@@ -323,7 +323,7 @@ class AmoService
             )
             ->add(
                 (new TextCustomFieldValuesModel())
-                    ->setFieldId(AmoEnum::CONTACT_GENDER_FIELD_ID)
+                    ->setFieldId(FieldCodesEnum::CONTACT_GENDER_FIELD_ID)
                     ->setValues(
                         (new TextCustomFieldValueCollection())
                             ->add(
@@ -355,7 +355,7 @@ class AmoService
                             ->add(
                                 (new NumericCustomFieldValuesModel())
                                     ->setFieldId(
-                                        AmoEnum::PRODUCT_CATALOG_PRICE_FIELD_ID
+                                        FieldCodesEnum::PRODUCT_CATALOG_PRICE_FIELD_ID
                                     )
                                     ->setValues(
                                         (new NumericCustomFieldValueCollection())
@@ -377,7 +377,7 @@ class AmoService
                             ->add(
                                 (new NumericCustomFieldValuesModel())
                                     ->setFieldId(
-                                        AmoEnum::PRODUCT_CATALOG_PRICE_FIELD_ID
+                                        FieldCodesEnum::PRODUCT_CATALOG_PRICE_FIELD_ID
                                     )
                                     ->setValues(
                                         (new NumericCustomFieldValueCollection())

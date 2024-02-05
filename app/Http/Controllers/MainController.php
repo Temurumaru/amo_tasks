@@ -11,7 +11,6 @@ use AmoCRM\Exceptions\AmoCRMoAuthApiException;
 use AmoCRM\Exceptions\InvalidArgumentException;
 use AmoCRM\Models\Customers\CustomerModel;
 use Illuminate\Http\Request;
-
 use App\Services\AmoService;
 
 class MainController extends Controller
@@ -103,7 +102,7 @@ class MainController extends Controller
         }
 
         // Создание Контакта
-        $contact = $amo->toCollectContact(
+        $contact = $amo->makeContactModel(
             $req->last_name,
             $req->first_name,
             $randomUserId,
@@ -123,7 +122,7 @@ class MainController extends Controller
         $products = $amo->createProducts();
 
         $amo->linkCatalogToLead($lead, $products);
-        $amo->linkContactToLeadAndSaveContact($lead, $contact);
+        $amo->linkSaveContactAndContactToLead($lead, $contact);
 
         return response()->json(
             [
