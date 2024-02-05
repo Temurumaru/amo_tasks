@@ -6,7 +6,6 @@ namespace App\Services;
 
 use AmoCRM\Client\AmoCRMApiClient;
 use AmoCRM\Collections\CatalogElementsCollection;
-use AmoCRM\Collections\CatalogsCollection;
 use AmoCRM\Collections\ContactsCollection;
 use AmoCRM\Collections\CustomFieldsValuesCollection;
 use AmoCRM\Collections\Leads\LeadsCollection;
@@ -20,7 +19,6 @@ use AmoCRM\Exceptions\AmoCRMoAuthApiException;
 use AmoCRM\Exceptions\InvalidArgumentException;
 use AmoCRM\Helpers\EntityTypesInterface;
 use AmoCRM\Models\CatalogElementModel;
-use AmoCRM\Models\CatalogModel;
 use AmoCRM\Models\ContactModel;
 use AmoCRM\Models\CustomFieldsValues\MultitextCustomFieldValuesModel;
 use AmoCRM\Models\CustomFieldsValues\NumericCustomFieldValuesModel;
@@ -178,7 +176,6 @@ class AmoService
         try {
             $contacts = $this->api->contacts()->get(with: [ContactModel::LEADS]);
         } catch (AmoCRMApiException $e) {
-            dd($e);
             return null;
         }
 
