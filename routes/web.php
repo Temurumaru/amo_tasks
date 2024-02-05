@@ -9,4 +9,4 @@ Route::get('/', [FormController::class, 'index'])->name('home');
 
 Route::get('/api/credentials', [MainController::class, 'credentials'])->name('api.credentials');
 
-Route::post('/api/lead_create', [MainController::class, 'leadCreate'])->name('api.lead_create');
+Route::post('/api/lead_create', [MainController::class, 'leadRequest'])->name('api.lead_create');

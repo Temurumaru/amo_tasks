@@ -161,9 +161,8 @@ class AmoService
     }
 
     /**
-     * @throws AmoCRMApiException
-     * @throws AmoCRMoAuthApiException
-     * @throws AmoCRMMissedTokenException
+     * @param string $phoneNumber
+     * @return ContactModel|null
      */
     public function getContactWherePhone(string $phoneNumber): ContactModel|null
     {
@@ -172,15 +171,14 @@ class AmoService
     }
 
     /**
-     * @throws AmoCRMoAuthApiException
-     * @throws AmoCRMApiException
-     * @throws AmoCRMMissedTokenException
+     * @return ContactsCollection|null
      */
     public function getContactsWithLeads(): ContactsCollection|null
     {
         try {
             $contacts = $this->api->contacts()->get(with: [ContactModel::LEADS]);
         } catch (AmoCRMApiException $e) {
+            dd($e);
             return null;
         }
 
