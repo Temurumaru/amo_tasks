@@ -64,7 +64,7 @@
 
                         // Конвертируем значение даты в Unix Time
                         if ($(this).attr("type") === "date") {
-                            formData[$(this).attr("name")] = new Date($(this).val()).getTime() / 1000;
+                            formData[$(this).attr("name")] = (new Date($(this).val()).getTime() / 1000).toString();
                         } else {
                             formData[$(this).attr("name")] = $(this).val();
                         }

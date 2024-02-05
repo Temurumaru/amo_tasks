@@ -51,7 +51,7 @@ class MainController extends Controller
             'product_price' => 'required',
             'first_name' => 'required|string',
             'last_name' => 'required|string',
-            'date_of_birth' => 'required',
+            'date_of_birth' => 'required|string',
             'gender' => 'required',
             'phone_number' => 'required',
             'email' => 'required|email',
