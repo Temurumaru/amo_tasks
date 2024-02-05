@@ -35,6 +35,8 @@ use AmoCRM\Models\LeadModel;
 use AmoCRM\Models\NoteType\ServiceMessageNote;
 use AmoCRM\Models\TaskModel;
 use AmoCRM\Models\UserModel;
+use App\Enums\FieldIdsEnum;
+use App\Enums\ProductIdsEnum;
 use Illuminate\Support\Facades\Config;
 use League\OAuth2\Client\Token\AccessToken;
 use App\Enums\FieldCodesEnum;
@@ -85,7 +87,7 @@ class AmoService
             ->setCustomFieldsValues(
                 (new CustomFieldsValuesCollection())->add(
                     (new TextCustomFieldValuesModel())->setFieldId(
-                        FieldCodesEnum::LEAD_PRODUCT_NAME_FIELD_ID
+                        FieldIdsEnum::LEAD_PRODUCT_NAME_FIELD_ID->value
                     )->setValues(
                         (new TextCustomFieldValueCollection())->add(
                             (new TextCustomFieldValueModel())->setValue(
@@ -217,7 +219,7 @@ class AmoService
         /** @var ContactModel $contact */
         foreach ($contacts as $contact) {
             $contactsPhoneNumbers = $contact->getCustomFieldsValues()
-                ->getBy('fieldCode', FieldCodesEnum::PHONE_CUSTOM_FIELD_CODE)
+                ->getBy('fieldCode', FieldCodesEnum::PHONE_CUSTOM_FIELD_CODE->value)
                 ->getValues();
             foreach ($contactsPhoneNumbers as $phoneNumber) {
                 if ($phoneNumber->getValue() === $phone) {
@@ -245,7 +247,7 @@ class AmoService
         $leadLinks = new LinksCollection();
 
         /** @var CatalogElements $elements */
-        $elements = $this->api->catalogElements(FieldCodesEnum::PRODUCT_CATALOG_ID)
+        $elements = $this->api->catalogElements(ProductIdsEnum::PRODUCT_CATALOG_ID->value)
             ->add($products);
 
         $this->api->leads()->link($lead, $leadLinks);
@@ -288,31 +290,31 @@ class AmoService
         $contactCustomFields = (new CustomFieldsValuesCollection())
             ->add(
                 (new MultitextCustomFieldValuesModel())
-                    ->setFieldCode(FieldCodesEnum::PHONE_CUSTOM_FIELD_CODE)
+                    ->setFieldCode(FieldCodesEnum::PHONE_CUSTOM_FIELD_CODE->value)
                     ->setValues(
                         (new MultitextCustomFieldValueCollection())
                             ->add(
                                 (new MultitextCustomFieldValueModel())
-                                    ->setEnum(FieldCodesEnum::WORK_CUSTOM_FIELD_VALUE_CODE)
+                                    ->setEnum(FieldCodesEnum::WORK_CUSTOM_FIELD_VALUE_CODE->value)
                                     ->setValue($phoneNumber)
                             )
                     )
             )
             ->add(
                 (new MultitextCustomFieldValuesModel())
-                    ->setFieldCode(FieldCodesEnum::EMAIL_CUSTOM_FIELD_CODE)
+                    ->setFieldCode(FieldCodesEnum::EMAIL_CUSTOM_FIELD_CODE->value)
                     ->setValues(
                         (new MultitextCustomFieldValueCollection())
                             ->add(
                                 (new MultitextCustomFieldValueModel())
-                                    ->setEnum(FieldCodesEnum::WORK_CUSTOM_FIELD_VALUE_CODE)
+                                    ->setEnum(FieldCodesEnum::WORK_CUSTOM_FIELD_VALUE_CODE->value)
                                     ->setValue($email)
                             )
                     )
             )
             ->add(
                 (new TextCustomFieldValuesModel())
-                    ->setFieldId(FieldCodesEnum::CONTACT_DATE_OF_BIRTH_FIELD_ID)
+                    ->setFieldId(FieldIdsEnum::CONTACT_DATE_OF_BIRTH_FIELD_ID->value)
                     ->setValues(
                         (new TextCustomFieldValueCollection())
                             ->add(
@@ -323,7 +325,7 @@ class AmoService
             )
             ->add(
                 (new TextCustomFieldValuesModel())
-                    ->setFieldId(FieldCodesEnum::CONTACT_GENDER_FIELD_ID)
+                    ->setFieldId(FieldIdsEnum::CONTACT_GENDER_FIELD_ID->value)
                     ->setValues(
                         (new TextCustomFieldValueCollection())
                             ->add(
@@ -355,7 +357,7 @@ class AmoService
                             ->add(
                                 (new NumericCustomFieldValuesModel())
                                     ->setFieldId(
-                                        FieldCodesEnum::PRODUCT_CATALOG_PRICE_FIELD_ID
+                                        ProductIdsEnum::PRODUCT_CATALOG_PRICE_FIELD_ID->value
                                     )
                                     ->setValues(
                                         (new NumericCustomFieldValueCollection())
@@ -377,7 +379,7 @@ class AmoService
                             ->add(
                                 (new NumericCustomFieldValuesModel())
                                     ->setFieldId(
-                                        FieldCodesEnum::PRODUCT_CATALOG_PRICE_FIELD_ID
+                                        ProductIdsEnum::PRODUCT_CATALOG_PRICE_FIELD_ID->value
                                     )
                                     ->setValues(
                                         (new NumericCustomFieldValueCollection())
